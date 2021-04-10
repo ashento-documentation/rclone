@@ -939,6 +939,12 @@ func (o *Object) setMetaData(info *storage.Object) {
 	} else {
 		o.modTime = modTime
 	}
+
+	// If gipped then size and md5sum are unknown
+	if o.gzipped {
+		o.bytes = -1
+		o.md5sum = ""
+	}
 }
 
 // readObjectInfo reads the definition for an object
@@ -1038,15 +1044,15 @@ func (o *Object) Open(ctx context.Context, options ...fs.OpenOption) (in io.Read
 		return nil, err
 	}
 	fs.FixRangeOption(options, o.bytes)
-	if o.gzipped {
-		// Allow files which are stored on the cloud storage system
-		// compressed to be downloaded without being decompressed.  Note
-		// that setting this here overrides the automatic decompression
-		// in the Transport.
-		//
-		// See: https://cloud.google.com/storage/docs/transcoding
-		req.Header.Set("Accept-Encoding", "gzip")
-	}
+	// if o.gzipped {
+	// 	// Allow files which are stored on the cloud storage system
+	// 	// compressed to be downloaded without being decompressed.  Note
+	// 	// that setting this here overrides the automatic decompression
+	// 	// in the Transport.
+	// 	//
+	// 	// See: https://cloud.google.com/storage/docs/transcoding
+	// 	req.Header.Set("Accept-Encoding", "gzip")
+	// }
 	fs.OpenOptionAddHTTPHeaders(req.Header, options)
 	var res *http.Response
 	err = o.fs.pacer.Call(func() (bool, error) {
