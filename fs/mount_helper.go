@@ -36,7 +36,7 @@ const helperValidOptChars = "-_0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLM
 // Parser errors
 var (
 	errHelperBadOption    = errors.New("option names may only contain `0-9`, `A-Z`, `a-z`, `-` and `_`")
-	errHelperOptionName   = errors.New("option name can't start with `-` or `_`")
+	errHelperOptionName   = errors.New("option name can't start with `-`")
 	errHelperEmptyOption  = errors.New("option name can't be empty")
 	errHelperQuotedValue  = errors.New("unterminated quoted value")
 	errHelperAfterQuote   = errors.New("expecting `,` or another quote after a quote")
@@ -208,7 +208,7 @@ func parseHelperOptionString(optString string) (opts []string, err error) {
 				if len(param) == 0 {
 					return nil, errHelperEmptyOption
 				}
-				if param[0] == '-' || param[0] == '_' {
+				if param[0] == '-' {
 					return nil, errHelperOptionName
 				}
 				prev = i + 1
