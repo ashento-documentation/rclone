@@ -144,16 +144,30 @@ func newSyncCopyMove(ctx context.Context, fdst, fsrc fs.Fs, deleteMode fs.Delete
 	if err != nil {
 		return nil, err
 	}
-	// If a max session duration has been defined add a deadline to the context
+	var endTime time.Time
 	if ci.MaxDuration > 0 {
-		endTime := time.Now().Add(ci.MaxDuration)
-		fs.Infof(s.fdst, "Transfer session deadline: %s", endTime.Format("2006/01/02 15:04:05"))
+		endTime = time.Now().Add(ci.MaxDuration)
+		fs.Infof(s.fdst, "Transfer session %v deadline: %s", ci.CutoffMode, endTime.Format("2006/01/02 15:04:05"))
+	}
+	// If a max session duration has been defined add a deadline
+	// to the main context if cutoff mode is hard. This will cut
+	// the transfers off.
+	if !endTime.IsZero() && ci.CutoffMode == fs.CutoffModeHard {
 		s.ctx, s.cancel = context.WithDeadline(ctx, endTime)
 	} else {
 		s.ctx, s.cancel = context.WithCancel(ctx)
 	}
-	// Input context - cancel this for graceful stop
-	s.inCtx, s.inCancel = context.WithCancel(s.ctx)
+	// Input context - cancel this for graceful stop.
+	//
+	// If a max session duration has been defined add a deadline
+	// to the input context if cutoff mode is graceful or soft.
+	// This won't stop the transfers but will cut the
+	// list/check/transfer pipelines.
+	if !endTime.IsZero() && ci.CutoffMode != fs.CutoffModeHard {
+		s.inCtx, s.inCancel = context.WithDeadline(s.ctx, endTime)
+	} else {
+		s.inCtx, s.inCancel = context.WithCancel(s.ctx)
+	}
 	if s.noTraverse && s.deleteMode != fs.DeleteModeOff {
 		if !fi.HaveFilesFrom() {
 			fs.Errorf(nil, "Ignoring --no-traverse with sync")
@@ -899,15 +913,17 @@ func (s *syncCopyMove) run() error {
 		s.processError(s.deleteEmptyDirectories(s.ctx, s.fsrc, s.srcEmptyDirs))
 	}
 
-	// Read the error out of the context if there is one
+	// Read the error out of the contexts if there is one
 	s.processError(s.ctx.Err())
+	s.processError(s.inCtx.Err())
 
 	// Print nothing to transfer message if there were no transfers and no errors
 	if s.deleteMode != fs.DeleteModeOnly && accounting.Stats(s.ctx).GetTransfers() == 0 && s.currentError() == nil {
 		fs.Infof(nil, "There was nothing to transfer")
 	}
 
-	// cancel the context to free resources
+	// cancel the contexts to free resources
+	s.inCancel()
 	s.cancel()
 	return s.currentError()
 }
